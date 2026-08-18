@@ -15,7 +15,7 @@
  * accompanying summary for details.
  */
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:2011";
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "https://secure-steg-backend.onrender.com";
 
 export class SecureStegApiError extends Error {
   status?: number;
