@@ -3421,7 +3421,8 @@ function Settings({
                                 nextTime;
                             }
                           }}
-                          className="w-full cursor-pointer"
+                          className="w-full cursor-pointer accent-[#1F1F1F]"
+                          style={{ accentColor: "#1F1F1F" }}
                         />
 
                         <div className="mt-1 flex justify-between text-[10px]">
