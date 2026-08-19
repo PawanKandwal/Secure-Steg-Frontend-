@@ -23,11 +23,29 @@ import {
   fetchPokemon,
   PokeApiError,
 } from "./pokeapi";
+import { getPixelSprite } from "./sprites";
 
 type Skin = "retro" | "modern";
 
 const SKIN_STORAGE_KEY = "steg-pokedex:skin";
 const SKIN_CHANGE_EVENT = "steg-pokedex:skin-change";
+
+// Modern skin shows the official artwork; Retro skin shows the Gen III
+// pixel sprite. Falls back to deriving the pixel sprite from the id for
+// any collection entry saved before `pixelSprite` existed on disk.
+function displaySprite(
+  pokemon: PokemonSummary,
+  isRetro: boolean,
+): string {
+  if (!isRetro) {
+    return pokemon.sprite;
+  }
+
+  return (
+    pokemon.pixelSprite ||
+    getPixelSprite(pokemon.id)
+  );
+}
 
 export interface PokedexCatalogEntry {
   id: number;
@@ -1007,9 +1025,10 @@ function CaughtTile({
       >
         {pokemon.sprite ? (
           <img
-            src={
-              pokemon.sprite
-            }
+            src={displaySprite(
+              pokemon,
+              isRetro,
+            )}
             alt={
               pokemon.name
             }
@@ -1288,9 +1307,10 @@ function DetailView({
         >
           {pokemon.sprite && (
             <img
-              src={
-                pokemon.sprite
-              }
+              src={displaySprite(
+                pokemon,
+                isRetro,
+              )}
               alt={
                 pokemon.name
               }

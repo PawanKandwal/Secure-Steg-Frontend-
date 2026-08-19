@@ -119,6 +119,9 @@ export function usePokedexCollection() {
                       : p.stats,
                   sprite:
                     pokemon.sprite || p.sprite,
+                  pixelSprite:
+                    pokemon.pixelSprite ||
+                    p.pixelSprite,
                 }
               : p,
           );

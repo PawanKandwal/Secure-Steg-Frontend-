@@ -2,6 +2,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useCallback,
   type ReactNode,
 } from "react";
 import {
@@ -887,13 +888,9 @@ export default function App() {
 
   // Exact position where sticker was released.
   const [
-    releasedSticker,
-    setReleasedSticker,
-  ] = useState<{
-    index: number;
-    left: number;
-    top: number;
-  } | null>(null);
+  releasedStickers,
+  setReleasedStickers,
+] = useState<Record<number, { left: number; top: number }>>({});
 
   const dragRef = useRef<{
     index: number;
@@ -905,54 +902,25 @@ export default function App() {
   // START DRAG
   // ───────────────────────────────────────────────────────────────────────
 
-  const handleStickerPointerDown = (
-    event: React.PointerEvent<
-      HTMLDivElement
-    >,
-    index: number,
-  ) => {
-    if (!INTERACTIVE_STICKERS) {
-      return;
-    }
+  const handlePointerUp = () => {
+  if (!dragRef.current) {
+    return;
+  }
 
-    event.preventDefault();
-    event.stopPropagation();
+  const released = draggedSticker;
 
-    const target =
-      event.currentTarget;
+  dragRef.current = null;
 
-    const rect =
-      target.getBoundingClientRect();
+  if (released) {
+    // Add the released sticker to the map without overwriting previous ones
+    setReleasedStickers((current) => ({
+      ...current,
+      [released.index]: { left: released.left, top: released.top },
+    }));
+  }
 
-    window
-      .getSelection?.()
-      ?.removeAllRanges();
-
-    setReleasedSticker(
-      (current) =>
-        current?.index === index
-          ? null
-          : current,
-    );
-
-    dragRef.current = {
-      index,
-      offsetX:
-        event.clientX - rect.left,
-      offsetY:
-        event.clientY - rect.top,
-    };
-
-    target.setPointerCapture?.(
-      event.pointerId,
-    );
-
-    setDraggedSticker({
-      index,
-      left: rect.left,
-      top: rect.top,
-    });
-  };
+  setDraggedSticker(null);
+};
 
   // ───────────────────────────────────────────────────────────────────────
   // DRAG MOVEMENT / RELEASE
@@ -1994,168 +1962,7 @@ export default function App() {
         }}
       />
 
-      {/* ================================================================
-          FLOATING POKÉMON
-          
-          IMPORTANT:
-          Pokémon-related floating elements are rendered only when
-          Pokémon Theme is active.
-      ================================================================= */}
-
-      {pokemonTheme &&
-        CONFIGS.map((c) =>
-          c.src ? (
-            <div
-              key={`sticker-${c.index}`}
-              className="floating-sticker absolute bottom-0 select-none"
-              onContextMenu={(event) =>
-                event.preventDefault()
-              }
-              onDragStart={(event) =>
-                event.preventDefault()
-              }
-              aria-hidden={
-                !INTERACTIVE_STICKERS
-              }
-              onPointerDown={(event) =>
-                handleStickerPointerDown(
-                  event,
-                  c.index,
-                )
-              }
-              style={
-                draggedSticker?.index ===
-                c.index
-                  ? ({
-                      position:
-                        "fixed",
-
-                      left:
-                        draggedSticker.left,
-
-                      top:
-                        draggedSticker.top,
-
-                      bottom:
-                        "auto",
-
-                      width:
-                        c.size,
-
-                      zIndex:
-                        50,
-
-                      cursor:
-                        INTERACTIVE_STICKERS
-                          ? "grabbing"
-                          : "default",
-
-                      touchAction:
-                        INTERACTIVE_STICKERS
-                          ? "none"
-                          : "auto",
-
-                      userSelect:
-                        "none",
-                    } as React.CSSProperties)
-                  : releasedSticker?.index ===
-                      c.index
-                    ? ({
-                        position:
-                          "fixed",
-
-                        left:
-                          releasedSticker.left,
-
-                        top:
-                          releasedSticker.top,
-
-                        bottom:
-                          "auto",
-
-                        width:
-                          c.size,
-
-                        zIndex:
-                          50,
-
-                        cursor:
-                          INTERACTIVE_STICKERS
-                            ? "grab"
-                            : "default",
-
-                        touchAction:
-                          INTERACTIVE_STICKERS
-                            ? "none"
-                            : "auto",
-
-                        "--drift":
-                          `${c.drift}px`,
-
-                        animation:
-                          "floatFromGrab 8s linear forwards",
-                      } as React.CSSProperties)
-                    : ({
-                        left:
-                          c.left,
-
-                        width:
-                          c.size,
-
-                        cursor:
-                          INTERACTIVE_STICKERS
-                            ? "grab"
-                            : "default",
-
-                        touchAction:
-                          INTERACTIVE_STICKERS
-                            ? "none"
-                            : "auto",
-
-                        animation:
-                          `floatUp ${c.duration} ${c.delay} infinite ease-in-out`,
-
-                        "--drift":
-                          `${c.drift}px`,
-                      } as React.CSSProperties)
-              }
-              onAnimationEnd={() => {
-                if (
-                  releasedSticker?.index ===
-                  c.index
-                ) {
-                  setReleasedSticker(
-                    null,
-                  );
-                }
-              }}
-            >
-              <img
-                src={c.src}
-                alt=""
-                draggable={false}
-                loading="lazy"
-                className="w-full h-auto object-contain"
-                style={{
-                  filter:
-                    "drop-shadow(0 4px 10px rgba(0,0,0,0.15))",
-
-                  pointerEvents:
-                    "none",
-
-                  userSelect:
-                    "none",
-
-                  WebkitUserDrag:
-                    "none",
-
-                  WebkitUserSelect:
-                    "none",
-                }}
-              />
-            </div>
-          ) : null,
-        )}
+      
 
       {/* ================================================================
           CENTER GLASS CARD
@@ -2857,6 +2664,113 @@ function Settings({
   const [duration, setDuration] =
     useState(0);
 
+  // ─────────────────────────────────────────────────────────────────────
+  // AUTOPLAY-SAFE PLAYBACK
+  //
+  // Browsers block audio.play() until the page has had some form of user
+  // interaction. `attemptPlay` tries to play immediately; if the browser
+  // rejects it, `armAutoplayUnlock` arms a one-time listener for the
+  // earliest allowed interaction (pointer/touch/key) and retries then.
+  // ─────────────────────────────────────────────────────────────────────
+
+  const unlockArmedRef =
+    useRef(false);
+
+  const removeUnlockListenersRef =
+    useRef<() => void>(() => {});
+
+  const attemptPlayRef =
+    useRef<() => void>(() => {});
+
+  const armAutoplayUnlock = useCallback(
+    () => {
+      if (unlockArmedRef.current) {
+        return;
+      }
+
+      unlockArmedRef.current = true;
+
+      const unlock = () => {
+        unlockArmedRef.current = false;
+        removeUnlockListenersRef.current();
+        attemptPlayRef.current();
+      };
+
+      removeUnlockListenersRef.current = () => {
+        document.removeEventListener(
+          "pointerdown",
+          unlock,
+        );
+
+        document.removeEventListener(
+          "keydown",
+          unlock,
+        );
+
+        document.removeEventListener(
+          "touchstart",
+          unlock,
+        );
+      };
+
+      document.addEventListener(
+        "pointerdown",
+        unlock,
+        { once: true },
+      );
+
+      document.addEventListener(
+        "keydown",
+        unlock,
+        { once: true },
+      );
+
+      document.addEventListener(
+        "touchstart",
+        unlock,
+        { once: true },
+      );
+    },
+    [],
+  );
+
+  const attemptPlay = useCallback(
+    () => {
+      const audio = audioRef.current;
+
+      if (!audio) {
+        return;
+      }
+
+      const playResult = audio.play();
+
+      if (
+        playResult &&
+        typeof playResult.catch ===
+          "function"
+      ) {
+        playResult.catch(() => {
+          // Autoplay blocked — wait for the
+          // earliest allowed user interaction.
+          armAutoplayUnlock();
+        });
+      }
+    },
+    [armAutoplayUnlock],
+  );
+
+  useEffect(() => {
+    attemptPlayRef.current = attemptPlay;
+  }, [attemptPlay]);
+
+  // Clean up any still-armed unlock listeners if this component ever
+  // unmounts before the user interacts with the page.
+  useEffect(() => {
+    return () => {
+      removeUnlockListenersRef.current();
+    };
+  }, []);
+
   const nextTrack = () =>
     setTrackIndex(
       (i) => (i + 1) % MUSIC_PLAYLIST.length,
@@ -2868,6 +2782,11 @@ function Settings({
         (i - 1 + MUSIC_PLAYLIST.length) %
         MUSIC_PLAYLIST.length,
     );
+
+    // Loads a track whenever it changes. This is the ONLY place that
+    // touches `audio.src` / `audio.load()`, so switching settings like
+    // `music` or `theme` can never re-trigger a reload and restart
+    // playback from 0.
     useEffect(() => {
       const audio = audioRef.current;
       const track = MUSIC_PLAYLIST[trackIndex];
@@ -2883,8 +2802,12 @@ function Settings({
       setDuration(0);
     }, [trackIndex]);
 
+    // Single play/pause driver. Also reacts to `trackIndex` so that
+    // advancing/going back a track resumes playback (autoplay-safe via
+    // `attemptPlay`) without duplicating the load logic above.
     useEffect(() => {
-  const audio = audioRef.current;
+      const audio = audioRef.current;
+
       if (!audio) {
         return;
       }
@@ -2894,14 +2817,13 @@ function Settings({
         return;
       }
 
-      audio.play().catch(() => {
-          // Browser autoplay may be blocked
-          // until the user interacts with the page.
-        });
+      attemptPlay();
       }, [
         music,
         isPlaying,
         theme,
+        trackIndex,
+        attemptPlay,
       ]);
 
       useEffect(() => {
@@ -2945,38 +2867,6 @@ function Settings({
     );
   };
 }, []);
-      
-    useEffect(() => { 
-      const audio =
-        audioRef.current;
-
-      const track =
-        MUSIC_PLAYLIST[trackIndex];
-
-      if (!audio || !track) {
-        return;
-      }
-
-      audio.src = track.src;
-      audio.load();
-
-      if (!music || !isPlaying || theme !== "pokemon") {
-        audio.pause();
-        return;
-      }
-
-      audio
-        .play()
-        .catch(() => {
-          // Browser autoplay may be blocked
-          // until the user interacts with the page.
-        });
-    }, [
-      trackIndex,
-      music,
-      isPlaying,
-      theme,
-    ]);
 
     useEffect(() => {
       const audio =
@@ -3833,31 +3723,21 @@ function Settings({
         <div
           className="fixed inset-0 flex items-center justify-center p-4"
           style={{
-            zIndex:
-              200,
-
-            background:
-              "rgba(15,23,42,0.42)",
-
-            backdropFilter:
-              "blur(8px)",
-
-            WebkitBackdropFilter:
-              "blur(8px)",
+            zIndex: 200,
+            background: "rgba(15,23,42,0.42)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
           }}
-          onPointerDown={(
-            event,
-          ) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              setAboutOpen(
-                false,
-              );
+          onPointerDown={(event) => {
+            // This stops the click from bubbling up and closing the Settings panel
+            event.stopPropagation(); 
+            
+            if (event.target === event.currentTarget) {
+              setAboutOpen(false);
             }
           }}
         >
+          
           <div
             className="w-full max-w-sm rounded-3xl p-6"
             style={{

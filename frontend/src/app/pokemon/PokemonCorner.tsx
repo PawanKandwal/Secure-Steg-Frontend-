@@ -1,6 +1,6 @@
 import {
-  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -9,6 +9,10 @@ import { usePokedexCollection } from "./usePokedexCollection";
 import PokedexModal from "./PokedexModal";
 import type { PokemonSummary } from "./types";
 import { titleCase } from "./typeColors";
+import {
+  getCuteSprite,
+  getPixelSprite,
+} from "./sprites";
 import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
@@ -18,7 +22,6 @@ import type {
 // Types
 // ───────────────────────────────────────────────────────────────────────
 
-type PokemonMode = "playground" | "catch";
 type PokedexTheme = "retro" | "modern";
 type Rarity = "common" | "uncommon" | "rare" | "epic";
 
@@ -69,17 +72,14 @@ type CaptureState =
 // Constants
 // ───────────────────────────────────────────────────────────────────────
 
-const MODE_STORAGE_KEY = "secure-steg-pokemon-mode";
 const POKEDEX_THEME_STORAGE_KEY = "steg-pokedex:skin";
 const POKEDEX_THEME_EVENT = "steg-pokedex:skin-change";
 
-const PLAYGROUND_COUNT = 140;
-const PLAYGROUND_COUNT_MOBILE = 68;
-const CATCH_COUNT = 36;
-const CATCH_COUNT_MOBILE = 22;
+const WORLD_COUNT = 36;
+const WORLD_COUNT_MOBILE = 22;
 
 const Z_FLOAT = 5;
-const Z_DRAG = 40;
+const Z_DRAG = 70;
 const Z_CONTROLS = 60;
 const Z_CAPTURE = 90;
 
@@ -316,14 +316,6 @@ function getRarity(id: number): Rarity {
   return "common";
 }
 
-function getPixelSprite(id: number) {
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-iii/emerald/${id}.png`;
-}
-
-function getCuteSprite(id: number) {
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
-}
-
 const POKEMON: PokemonDefinition[] =
   POKEMON_NAMES.map((name, index) => {
     const id = index + 1;
@@ -357,14 +349,6 @@ const WEIGHTED_POOL: PokemonDefinition[] =
 // Helpers
 // ───────────────────────────────────────────────────────────────────────
 
-function randomDefinition(): PokemonDefinition {
-  return POKEMON[
-    Math.floor(
-      Math.random() * POKEMON.length,
-    )
-  ];
-}
-
 function weightedRandomDefinition(): PokemonDefinition {
   return WEIGHTED_POOL[
     Math.floor(
@@ -376,14 +360,9 @@ function weightedRandomDefinition(): PokemonDefinition {
 
 function createFloatingPokemon(
   instanceId: number,
-  mode: PokemonMode,
 ): FloatingPokemon {
-  const isPlayground =
-    mode === "playground";
-
-  const definition = isPlayground
-    ? randomDefinition()
-    : weightedRandomDefinition();
+  const definition =
+    weightedRandomDefinition();
 
   return {
     ...definition,
@@ -393,46 +372,33 @@ function createFloatingPokemon(
     left:
       2 + Math.random() * 92,
 
-    size: isPlayground
-      ? 46 + Math.random() * 70
-      : 46 + Math.random() * 30,
+    size:
+      46 + Math.random() * 30,
 
-    duration: isPlayground
-      ? 11 + Math.random() * 10
-      : 13 + Math.random() * 9,
+    duration:
+      13 + Math.random() * 9,
 
     delay:
-      Math.random() *
-      (isPlayground ? 14 : 9),
+      Math.random() * 9,
 
     drift:
       -24 + Math.random() * 48,
   };
 }
 
-function buildWorld(
-  mode: PokemonMode,
-): FloatingPokemon[] {
+function buildWorld(): FloatingPokemon[] {
   const isMobile =
     typeof window !== "undefined" &&
     window.innerWidth <= 700;
 
-  const count =
-    mode === "playground"
-      ? isMobile
-        ? PLAYGROUND_COUNT_MOBILE
-        : PLAYGROUND_COUNT
-      : isMobile
-        ? CATCH_COUNT_MOBILE
-        : CATCH_COUNT;
+  const count = isMobile
+    ? WORLD_COUNT_MOBILE
+    : WORLD_COUNT;
 
   return Array.from(
     { length: count },
     (_, index) =>
-      createFloatingPokemon(
-        index,
-        mode,
-      ),
+      createFloatingPokemon(index),
   );
 }
 
@@ -443,6 +409,7 @@ function createSummary(
     id: pokemon.id,
     name: pokemon.name,
     sprite: pokemon.cuteSprite,
+    pixelSprite: pokemon.pixelSprite,
     types: [],
     height: 0,
     weight: 0,
@@ -450,18 +417,6 @@ function createSummary(
     stats: [],
     caughtAt: Date.now(),
   };
-}
-
-function readInitialMode(): PokemonMode {
-  try {
-    return window.localStorage.getItem(
-      MODE_STORAGE_KEY,
-    ) === "catch"
-      ? "catch"
-      : "playground";
-  } catch {
-    return "playground";
-  }
 }
 
 function readPokedexTheme(): PokedexTheme {
@@ -504,19 +459,9 @@ export default function PokemonCorner() {
     updatePokemon,
   } = usePokedexCollection();
 
-  const initialMode = useMemo(
-    () => readInitialMode(),
-    [],
-  );
-
-  const [mode, setMode] =
-    useState<PokemonMode>(
-      initialMode,
-    );
-
   const [world, setWorld] =
     useState<FloatingPokemon[]>(
-      () => buildWorld(initialMode),
+      buildWorld,
     );
 
   const [drag, setDrag] =
@@ -540,6 +485,8 @@ export default function PokemonCorner() {
     useRef<HTMLButtonElement | null>(
       null,
     );
+    // Tracks the timestamp of the last spin to enforce a speed limit
+  const lastSpinTime = useRef(0);
 
   const [captureState, setCaptureState] =
     useState<CaptureState>("idle");
@@ -570,12 +517,20 @@ export default function PokemonCorner() {
   const [dexOpen, setDexOpen] =
     useState(false);
 
+  const [spinDegrees, setSpinDegrees] = useState(0);
+  const [ballClicks, setBallClicks] = useState(0);
+  
+  // Tracks the current random ball type
+  const [ballType, setBallType] = useState<"poke" | "great" | "ultra" | "premier" | "master">("poke");
+
   const [pokedexTheme, setPokedexTheme] =
     useState<PokedexTheme>(
       readPokedexTheme,
     );
 
-  useEffect(() => {
+  // Kept in sync via useLayoutEffect (not useEffect) so drag/capture
+  // handlers can never read a stale world array.
+  useLayoutEffect(() => {
     worldRef.current = world;
   }, [world]);
 
@@ -654,43 +609,6 @@ export default function PokemonCorner() {
   }, []);
 
   // ───────────────────────────────────────────────────────────────────
-  // Mode switch
-  // ───────────────────────────────────────────────────────────────────
-
-  const switchMode = useCallback(
-    (nextMode: PokemonMode) => {
-      setMode(nextMode);
-
-      try {
-        window.localStorage.setItem(
-          MODE_STORAGE_KEY,
-          nextMode,
-        );
-      } catch {
-        // Ignore storage failures.
-      }
-
-      dragRef.current = null;
-      setDrag(null);
-
-      setPokeballHover(false);
-
-      setCaptureState("idle");
-      setCapturePokemon(null);
-      setSuccessName(null);
-
-      setReleased({});
-      setDexOpen(false);
-
-      // Immediate world rebuild.
-      setWorld(
-        buildWorld(nextMode),
-      );
-    },
-    [],
-  );
-
-  // ───────────────────────────────────────────────────────────────────
   // Global drag tracking
   // ───────────────────────────────────────────────────────────────────
 
@@ -730,19 +648,16 @@ export default function PokemonCorner() {
         return;
       }
 
-      const centerX =
-        left +
-        current.size / 2;
+      
 
-      const centerY =
-        top +
-        current.size / 2;
+      const inside = !(
+      left + current.size < ballRect.left ||
+      left > ballRect.right ||
+      top + current.size < ballRect.top ||
+      top > ballRect.bottom
+      );
 
-      const inside =
-        centerX >= ballRect.left &&
-        centerX <= ballRect.right &&
-        centerY >= ballRect.top &&
-        centerY <= ballRect.bottom;
+setPokeballHover(inside);
 
       setPokeballHover(inside);
     };
@@ -773,20 +688,14 @@ export default function PokemonCorner() {
       const ballRect =
         pokeballRef.current?.getBoundingClientRect();
 
-      const centerX =
-        current.left +
-        current.size / 2;
-
-      const centerY =
-        current.top +
-        current.size / 2;
-
       const droppedOnBall =
-        !!ballRect &&
-        centerX >= ballRect.left &&
-        centerX <= ballRect.right &&
-        centerY >= ballRect.top &&
-        centerY <= ballRect.bottom;
+      !!ballRect &&
+      !(
+        current.left + current.size < ballRect.left ||
+        current.left > ballRect.right ||
+        current.top + current.size < ballRect.top ||
+        current.top > ballRect.bottom
+      );
 
       // ─────────────────────────────────────────────────────────────
       // Catch
@@ -811,9 +720,7 @@ export default function PokemonCorner() {
                 size: pokemon.size,
 
                 sprite:
-                  mode === "playground"
-                    ? pokemon.cuteSprite
-                    : pokemon.pixelSprite,
+                  pokemon.cuteSprite,
 
                 drift:
                   pokemon.drift,
@@ -873,9 +780,7 @@ export default function PokemonCorner() {
             size: pokemon.size,
 
             sprite:
-              mode === "playground"
-                ? pokemon.cuteSprite
-                : pokemon.pixelSprite,
+              pokemon.cuteSprite,
 
             drift:
               pokemon.drift,
@@ -922,7 +827,7 @@ export default function PokemonCorner() {
         finishDrag,
       );
     };
-  }, [mode]);
+  }, []);
 
   // ───────────────────────────────────────────────────────────────────
   // Capture sequence
@@ -937,13 +842,14 @@ export default function PokemonCorner() {
     }
 
     let cancelled = false;
+    const isStale = () => cancelled;
 
     const runCapture = async () => {
       setCaptureState("opening");
 
       await wait(700);
 
-      if (cancelled) {
+      if (isStale()) {
         return;
       }
 
@@ -951,7 +857,7 @@ export default function PokemonCorner() {
 
       await wait(5000);
 
-      if (cancelled) {
+      if (isStale()) {
         return;
       }
 
@@ -985,7 +891,7 @@ export default function PokemonCorner() {
 
       await wait(1200);
 
-      if (cancelled) {
+      if (isStale()) {
         return;
       }
 
@@ -1001,7 +907,6 @@ export default function PokemonCorner() {
                 ? {
                     ...createFloatingPokemon(
                       instanceId,
-                      mode,
                     ),
                     delay: 0,
                   }
@@ -1022,7 +927,6 @@ export default function PokemonCorner() {
   }, [
     capturePokemon,
     addPokemon,
-    mode,
   ]);
 
   // ───────────────────────────────────────────────────────────────────
@@ -1087,6 +991,18 @@ export default function PokemonCorner() {
   return (
     <>
       <style>{`
+      /* ============================================================
+           POKÉBALL SPIN
+        ============================================================ */
+
+        @keyframes pcBallSpin {
+          0% {
+            transform: rotate(0deg);
+          }
+          100% {
+            transform: rotate(360deg);
+          }
+        }
         /* ============================================================
            NORMAL FLOAT
         ============================================================ */
@@ -1363,150 +1279,6 @@ export default function PokemonCorner() {
               translateY(0)
               scale(1);
           }
-        }
-
-        /* ============================================================
-           MODE SWITCH
-        ============================================================ */
-
-        .pc-mode-switch {
-          position: fixed;
-
-          top: 20px;
-          right: 20px;
-
-          z-index:
-            ${Z_CONTROLS};
-
-          display: flex;
-
-          align-items: center;
-
-          gap: 10px;
-
-          padding:
-            8px 12px 8px 16px;
-
-          border:
-            0;
-
-          border-radius:
-            999px;
-
-          background:
-            rgba(
-              255,
-              255,
-              255,
-              0.9
-            );
-
-          backdrop-filter:
-            blur(14px);
-
-          box-shadow:
-            0 10px 28px
-            rgba(
-              100,
-              130,
-              200,
-              0.18
-            );
-
-          cursor:
-            pointer;
-
-          user-select:
-            none;
-
-          -webkit-user-select:
-            none;
-        }
-
-        .pc-mode-label {
-          font-size:
-            12px;
-
-          font-weight:
-            800;
-
-          letter-spacing:
-            0.04em;
-        }
-
-        .pc-mode-track {
-          display:
-            flex;
-
-          align-items:
-            center;
-
-          width:
-            48px;
-
-          height:
-            26px;
-
-          padding:
-            3px;
-
-          border-radius:
-            999px;
-
-          background:
-            #e2e8f0;
-        }
-
-        .pc-mode-switch.catch
-          .pc-mode-track {
-          background:
-            #ef4444;
-        }
-
-        .pc-mode-knob {
-          display:
-            flex;
-
-          align-items:
-            center;
-
-          justify-content:
-            center;
-
-          width:
-            20px;
-
-          height:
-            20px;
-
-          border-radius:
-            50%;
-
-          background:
-            white;
-
-          font-size:
-            9px;
-
-          box-shadow:
-            0 2px 5px
-            rgba(
-              0,
-              0,
-              0,
-              0.12
-            );
-
-          transition:
-            transform
-            0.25s
-            ease;
-        }
-
-        .pc-mode-switch.catch
-          .pc-mode-knob {
-          transform:
-            translateX(22px);
         }
 
         /* ============================================================
@@ -1896,17 +1668,6 @@ export default function PokemonCorner() {
         @media (
           max-width: 640px
         ) {
-          .pc-mode-switch {
-            top:
-              max(12px, env(safe-area-inset-top));
-
-            right:
-              max(12px, env(safe-area-inset-right));
-
-            padding:
-              7px 10px 7px 12px;
-          }
-
           .pc-controls {
             right:
               max(12px, env(safe-area-inset-right));
@@ -1955,63 +1716,14 @@ export default function PokemonCorner() {
       `}</style>
 
       {/* ───────────────────────────────────────────────────────────────
-          MODE SWITCH
-      ─────────────────────────────────────────────────────────────── */}
-
-      <button
-        type="button"
-        className={`pc-mode-switch ${mode}`}
-        onClick={() =>
-          switchMode(
-            mode === "playground"
-              ? "catch"
-              : "playground",
-          )
-        }
-        onDoubleClick={(
-          event,
-        ) => {
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-        aria-label={
-          mode === "playground"
-            ? "Switch to Catch mode"
-            : "Switch to Playground mode"
-        }
-      >
-        <span className="pc-mode-label">
-          {mode === "playground"
-            ? "PLAYGROUND"
-            : "CATCH"}
-        </span>
-
-        <span className="pc-mode-track">
-          <span className="pc-mode-knob">
-            {mode === "playground"
-              ? "◀"
-              : "▶"}
-          </span>
-        </span>
-      </button>
-
-      {/* ───────────────────────────────────────────────────────────────
           FLOATING WORLD
       ─────────────────────────────────────────────────────────────── */}
 
       <div
         style={{
-          position:
-            "fixed",
-
-          inset:
-            0,
-
-          zIndex:
-            Z_FLOAT,
-
-          overflow:
-            "hidden",
+          position: "absolute",
+          inset: 0,
+          overflow: "hidden",
 
           pointerEvents:
             "none",
@@ -2053,9 +1765,7 @@ export default function PokemonCorner() {
             }
 
             const sprite =
-              mode === "playground"
-                ? pokemon.cuteSprite
-                : pokemon.pixelSprite;
+              pokemon.cuteSprite;
 
             // Dragging layer
             if (
@@ -2148,34 +1858,19 @@ export default function PokemonCorner() {
             // Normal floating layer
             return (
               <div
-                key={
-                  pokemon.instanceId
+                key={pokemon.instanceId}
+                onPointerDown={(event) =>
+                  handlePokemonPointerDown(event, pokemon)
                 }
-                onPointerDown={(
-                  event,
-                ) =>
-                  handlePokemonPointerDown(
-                    event,
-                    pokemon,
-                  )
-                }
-                onContextMenu={(
-                  event,
-                ) =>
-                  event.preventDefault()
-                }
-                onDoubleClick={(
-                  event,
-                ) => {
+                onContextMenu={(event) => event.preventDefault()}
+                onDoubleClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                 }}
                 style={{
-                  position:
-                    "absolute",
-
-                  bottom:
-                    0,
+                  position: "absolute",
+                  zIndex: Z_FLOAT,
+                  bottom: 0,
 
                   left:
                     `${pokemon.left}%`,
@@ -2304,41 +1999,18 @@ export default function PokemonCorner() {
                   event.stopPropagation();
                 }}
                 style={{
-                  position:
-                    "fixed",
-
-                  left:
-                    releasedPokemon.x,
-
-                  top:
-                    releasedPokemon.y,
-
-                  width:
-                    releasedPokemon.size,
-
-                  zIndex:
-                    Z_DRAG,
-
-                  pointerEvents:
-                    "auto",
-
-                  touchAction:
-                    "none",
-
-                  cursor:
-                    "grab",
-
-                  userSelect:
-                    "none",
-
-                  WebkitUserSelect:
-                    "none",
-
-                  animation:
-                    `pcContinueFloat ${releasedPokemon.duration}s linear forwards`,
-
-                  ["--released-drift" as string]:
-                    `${releasedPokemon.drift}px`,
+                  position: "fixed",
+                  left: releasedPokemon.x,
+                  top: releasedPokemon.y,
+                  width: releasedPokemon.size,
+                  zIndex: Z_FLOAT, // <--- Sinks back behind the Pokéball
+                  pointerEvents: "auto",
+                  touchAction: "none",
+                  cursor: "grab",
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                  animation: `pcContinueFloat ${releasedPokemon.duration}s linear forwards`,
+                  ["--released-drift" as string]: `${releasedPokemon.drift}px`,
                 }}
                 onAnimationEnd={() => {
                   if (
@@ -2372,7 +2044,6 @@ export default function PokemonCorner() {
                             ? {
                                 ...createFloatingPokemon(
                                   instanceId,
-                                  mode,
                                 ),
                                 delay: 0,
                               }
@@ -2414,99 +2085,107 @@ export default function PokemonCorner() {
       </div>
 
       {/* ───────────────────────────────────────────────────────────────
-          CATCH MODE CONTROLS
+          CONTROLS
       ─────────────────────────────────────────────────────────────── */}
 
-      {mode === "catch" && (
-        <div className="pc-controls">
-          {/* Pokédex */}
-          <button
-            type="button"
-            className="pc-control pc-dex-btn"
-            onClick={() =>
-              setDexOpen(true)
-            }
-            onDoubleClick={(
-              event,
-            ) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-            aria-label="Open Pokédex"
-          >
-            {pokedexTheme === "retro" ? (
-              <RetroPokedexIcon />
-            ) : (
-              <ModernPokedexIcon />
-            )}
+      <div className="pc-controls">
+        {/* Pokédex */}
+        <button
+          type="button"
+          className="pc-control pc-dex-btn"
+          onClick={() =>
+            setDexOpen(true)
+          }
+          onDoubleClick={(
+            event,
+          ) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          aria-label="Open Pokédex"
+        >
+          {pokedexTheme === "retro" ? (
+            <RetroPokedexIcon />
+          ) : (
+            <ModernPokedexIcon />
+          )}
 
-            {unreadIds.length > 0 && (
-              <span
-                className="pc-badge"
-                aria-label={`${unreadIds.length} unread Pokédex ${
-                  unreadIds.length === 1
-                    ? "entry"
-                    : "entries"
-                }`}
-              >
-                {unreadIds.length > 99
-                  ? "99+"
-                  : unreadIds.length}
-              </span>
-            )}
-          </button>
+          {unreadIds.length > 0 && (
+            <span
+              className="pc-badge"
+              aria-label={`${unreadIds.length} unread Pokédex ${
+                unreadIds.length === 1
+                  ? "entry"
+                  : "entries"
+              }`}
+            >
+              {unreadIds.length > 99
+                ? "99+"
+                : unreadIds.length}
+            </span>
+          )}
+        </button>
 
-          {/* Pokéball */}
-          <button
-            ref={
-              pokeballRef
-            }
-            type="button"
-            className="pc-control pc-pokeball"
-            aria-label="Pokéball"
-            disabled={
-              captureState !==
-              "idle"
-            }
-            onDoubleClick={(
-              event,
-            ) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-          >
-            {pokeballHover &&
-              captureState ===
-                "idle" && (
-              <span className="pc-ball-glow" />
-            )}
+        {/* Pokéball */}
+        <button
+          ref={pokeballRef}
+          type="button"
+          className="pc-control pc-pokeball"
+          aria-label="Pokéball"
+          disabled={captureState !== "idle"}
+          onClick={() => {
+            if (captureState !== "idle") return;
 
-            <PokeballIcon
-              open={
-                pokeballHover ||
-                captureState ===
-                  "shaking"
+            const now = Date.now();
+            if (now - lastSpinTime.current < 120) return;
+            
+            lastSpinTime.current = now;
+            setSpinDegrees(prev => prev + 360);
+
+            // Increment clicks and check for the 50-click threshold
+            setBallClicks(prev => {
+              const nextClicks = prev + 1;
+              
+              if (nextClicks % 15 === 0) {
+                // Time to transition! Pick a random ball.
+                setBallType(currentType => {
+                  const allTypes: Array<"poke" | "great" | "ultra" | "premier" | "master"> = 
+                    ["poke", "great", "ultra", "premier", "master"];
+                  
+                  // Remove the current type so it's guaranteed to change
+                  const availableTypes = allTypes.filter(t => t !== currentType);
+                  
+                  // Pick a random one from the remaining options
+                  return availableTypes[Math.floor(Math.random() * availableTypes.length)];
+                });
               }
-              capturing={
-                captureState ===
-                "shaking"
-              }
-              success={
-                captureState ===
-                "success"
-              }
-            />
+              
+              return nextClicks;
+            });
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          {pokeballHover && captureState === "idle" && (
+            <span className="pc-ball-glow" />
+          )}
 
-            {pokeballHover &&
-              captureState ===
-                "idle" && (
-              <span className="pc-release-hint">
-                Release to catch
-              </span>
-            )}
-          </button>
-        </div>
-      )}
+          {/* Calculate the ball evolution based on the current combo */}
+          <PokeballIcon
+            open={pokeballHover || captureState === "shaking"}
+            capturing={captureState === "shaking"}
+            success={captureState === "success"}
+            spinDegrees={spinDegrees}
+            type={ballType}
+          />
+
+          {pokeballHover && captureState === "idle" && (
+            <span className="pc-release-hint">Release to catch</span>
+          )}
+        </button>
+      </div>
 
       {/* ───────────────────────────────────────────────────────────────
           CAPTURE OVERLAY
@@ -2571,7 +2250,7 @@ export default function PokemonCorner() {
               >
                 <img
                   src={
-                    capturePokemon.pixelSprite
+                    capturePokemon.cuteSprite
                   }
                   alt=""
                   draggable={
@@ -2869,11 +2548,27 @@ function PokeballIcon({
   open,
   capturing,
   success,
+  spinDegrees = 0,
+  type = "poke",
 }: {
   open?: boolean;
   capturing?: boolean;
   success?: boolean;
+  spinDegrees?: number;
+  type?: "poke" | "great" | "ultra" | "premier" | "master";
 }) {
+  // Define the dynamic colors for the 5 ball types
+  const theme = {
+    poke: { top: "#EF4444", bottom: "white", ring: "#1E293B" },
+    great: { top: "#3B82F6", bottom: "white", ring: "#1E293B" },
+    ultra: { top: "#334155", bottom: "white", ring: "#1E293B" },
+    premier: { top: "white", bottom: "white", ring: "#EF4444" },
+    master: { top: "#8B5CF6", bottom: "white", ring: "#1E293B" },
+  }[type] || { top: "#EF4444", bottom: "white", ring: "#1E293B" };
+
+  // A shared transition so the colors morph smoothly instead of snapping
+  const morphTransition = "fill 0.4s ease, stroke 0.4s ease, opacity 0.4s ease";
+
   return (
     <svg
       width="70%"
@@ -2882,105 +2577,57 @@ function PokeballIcon({
       preserveAspectRatio="xMidYMid meet"
       fill="none"
       style={{
-        width:
-          "70%",
-
-        height:
-          "70%",
-
-        aspectRatio:
-          "1 / 1",
-
-        display:
-          "block",
-
-        flex:
-          "0 0 auto",
-
-        userSelect:
-          "none",
-
-        WebkitUserSelect:
-          "none",
-
-        animation:
-          capturing
-            ? "pcBallShake 0.8s ease-in-out infinite, pcBallRedPulse 0.65s ease-in-out infinite"
-            : success
-              ? "pcBallGreenPulse 0.75s ease-in-out infinite"
-              : undefined,
+        width: "70%",
+        height: "70%",
+        aspectRatio: "1 / 1",
+        display: "block",
+        flex: "0 0 auto",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        transform: `rotate(${spinDegrees}deg)`,
+        transition: capturing || success ? "none" : "transform 2s cubic-bezier(0.1, 0.9, 0.2, 1)",
+        animation: capturing
+          ? "pcBallShake 0.8s ease-in-out infinite, pcBallRedPulse 0.65s ease-in-out infinite"
+          : success
+            ? "pcBallGreenPulse 0.75s ease-in-out infinite"
+            : undefined,
       }}
     >
       <defs>
         <clipPath id="pokeball-circle-clip">
-          <circle
-            cx="80"
-            cy="80"
-            r="72"
-          />
+          <circle cx="80" cy="80" r="72" />
         </clipPath>
       </defs>
 
-      {/* White circular base */}
-      <circle
-        cx="80"
-        cy="80"
-        r="72"
-        fill="white"
-      />
+      {/* Base White Bottom */}
+      <circle cx="80" cy="80" r="72" fill={theme.bottom} style={{ transition: morphTransition }} />
 
-      {/* Red upper half */}
-      <rect
-        x="8"
-        y="8"
-        width="144"
-        height="72"
-        fill="#EF4444"
-        clipPath="url(#pokeball-circle-clip)"
-      />
+      {/* Dynamic Upper Half */}
+      <rect x="8" y="8" width="144" height="72" fill={theme.top} clipPath="url(#pokeball-circle-clip)" style={{ transition: morphTransition }} />
+
+      {/* --- GREAT BALL DETAILS --- */}
+      <path d="M 25 15 Q 50 35 45 60 L 25 60 Q 25 35 10 25 Z" fill="#EF4444" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "great" ? 1 : 0, transition: morphTransition }} />
+      <path d="M 135 15 Q 110 35 115 60 L 135 60 Q 135 35 150 25 Z" fill="#EF4444" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "great" ? 1 : 0, transition: morphTransition }} />
+
+      {/* --- ULTRA BALL DETAILS --- */}
+      <path d="M 40 80 L 40 40 L 120 40 L 120 80 L 140 80 L 140 20 L 20 20 L 20 80 Z" fill="#FACC15" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "ultra" ? 1 : 0, transition: morphTransition }} />
+
+      {/* --- MASTER BALL DETAILS --- */}
+      <circle cx="35" cy="40" r="16" fill="#EC4899" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "master" ? 1 : 0, transition: morphTransition }} />
+      <circle cx="125" cy="40" r="16" fill="#EC4899" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "master" ? 1 : 0, transition: morphTransition }} />
+      <path d="M 62 30 L 72 30 L 80 44 L 88 30 L 98 30 L 98 55 L 88 55 L 88 40 L 80 50 L 72 40 L 72 55 L 62 55 Z" fill="white" style={{ opacity: type === "master" ? 1 : 0, transition: morphTransition }} />
 
       {/* Outer circular border */}
-      <circle
-        cx="80"
-        cy="80"
-        r="72"
-        stroke="#1E293B"
-        strokeWidth="8"
-      />
+      <circle cx="80" cy="80" r="72" stroke="#1E293B" strokeWidth="8" />
 
       {/* Middle divider */}
-      <line
-        x1="8"
-        y1="80"
-        x2="152"
-        y2="80"
-        stroke="#1E293B"
-        strokeWidth="8"
-      />
+      <line x1="8" y1="80" x2="152" y2="80" stroke={theme.ring} strokeWidth="8" style={{ transition: morphTransition }} />
 
       {/* Center ring */}
-      <circle
-        cx="80"
-        cy="80"
-        r="22"
-        fill="white"
-        stroke="#1E293B"
-        strokeWidth="8"
-      />
+      <circle cx="80" cy="80" r="22" fill="white" stroke={theme.ring} strokeWidth="8" style={{ transition: morphTransition }} />
 
       {/* Center button */}
-      <circle
-        cx="80"
-        cy="80"
-        r="9"
-        fill={
-          success
-            ? "#22C55E"
-            : open
-              ? "#EF4444"
-              : "#1E293B"
-        }
-      />
+      <circle cx="80" cy="80" r="9" fill={success ? "#22C55E" : open ? "#EF4444" : theme.ring} style={{ transition: morphTransition }} />
     </svg>
   );
 }

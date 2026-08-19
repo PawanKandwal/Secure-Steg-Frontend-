@@ -6,7 +6,10 @@ export interface PokemonStat {
 export interface PokemonSummary {
   id: number;
   name: string;
+  /** Modern Pokédex artwork (official artwork). */
   sprite: string;
+  /** Retro Pokédex artwork (Gen III pixel sprite). */
+  pixelSprite: string;
   types: string[];
   /** decimetres, as returned by PokeAPI */
   height: number;
