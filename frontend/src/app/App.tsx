@@ -362,7 +362,8 @@ type AppLanguage =
 
 const SETTINGS_STORAGE_KEY =
   "secure-steg-settings";
-  // ─────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────
 // POKÉMON SETTINGS PANEL ARTWORK
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -381,11 +382,7 @@ const POKEMON_SETTINGS_ART = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
-// MUSIC PLAYLIST (placeholder — no audio files wired up yet)
-//
-// Once real audio files exist (see note further below), replace this with
-// actual track metadata and hook `trackIndex` / `isPlaying` up to an
-// <audio> element / ref.
+// MUSIC PLAYLIST
 // ─────────────────────────────────────────────────────────────────────────
 
 const MUSIC_ASSETS = import.meta.glob<string>(
@@ -514,26 +511,6 @@ const MUSIC_PLAYLIST = [
     src: string;
   } => Boolean(track.src),
 );
-
-// ─────────────────────────────────────────────────────────────────────────
-// FUTURE AUDIO ASSETS (architecture placeholder — no files added)
-//
-// The Sound Effects and Music settings below are already structurally
-// ready to be wired up to real files once they exist:
-//
-//   src/assets/music/background.mp3   -> played/looped when `music` is true
-//   src/assets/sounds/click.wav       -> played on UI interaction when
-//                                        `soundEffects` is true
-//   src/assets/sounds/capture.wav     -> played on Pokémon capture events
-//   src/assets/sounds/success.wav     -> played on hide/reveal success
-//
-// No audio imports are added here since the files do not exist yet; doing
-// so would break the build. When the files are added, import them the same
-// way `pikachuFallback` is imported above and gate playback on the
-// `soundEffects` / `music` state already present in this component. The
-// `trackIndex` / `isPlaying` state added for the playlist UI should drive
-// an <audio> ref's `src`, `currentTime` and `play()`/`pause()` calls.
-// ─────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────
 // TRANSLATIONS
@@ -729,7 +706,7 @@ export default function App() {
     useState<Mode>("hide");
 
   // ───────────────────────────────────────────────────────────────────────
-  // APPLICATION SETTINGS
+  // APPLICATION SETTINGS (Unified with Light Mode as Default)
   // ───────────────────────────────────────────────────────────────────────
 
   const [theme, setTheme] =
@@ -741,7 +718,7 @@ export default function App() {
           );
 
         if (!saved) {
-          return "pokemon";
+          return "light"; // Default to light mode for new users!
         }
 
         const parsed =
@@ -758,7 +735,7 @@ export default function App() {
         // Use default.
       }
 
-      return "pokemon";
+      return "light";
     });
 
   const [soundEffects, setSoundEffects] =
@@ -886,41 +863,16 @@ export default function App() {
     top: number;
   } | null>(null);
 
-  // Exact position where sticker was released.
   const [
-  releasedStickers,
-  setReleasedStickers,
-] = useState<Record<number, { left: number; top: number }>>({});
+    releasedStickers,
+    setReleasedStickers,
+  ] = useState<Record<number, { left: number; top: number }>>({});
 
   const dragRef = useRef<{
     index: number;
     offsetX: number;
     offsetY: number;
   } | null>(null);
-
-  // ───────────────────────────────────────────────────────────────────────
-  // START DRAG
-  // ───────────────────────────────────────────────────────────────────────
-
-  const handlePointerUp = () => {
-  if (!dragRef.current) {
-    return;
-  }
-
-  const released = draggedSticker;
-
-  dragRef.current = null;
-
-  if (released) {
-    // Add the released sticker to the map without overwriting previous ones
-    setReleasedStickers((current) => ({
-      ...current,
-      [released.index]: { left: released.left, top: released.top },
-    }));
-  }
-
-  setDraggedSticker(null);
-};
 
   // ───────────────────────────────────────────────────────────────────────
   // DRAG MOVEMENT / RELEASE
@@ -968,9 +920,10 @@ export default function App() {
       dragRef.current = null;
 
       if (released) {
-        // Continue floating from exactly where
-        // the user released it.
-        setReleasedSticker(released);
+        setReleasedStickers((current) => ({
+          ...current,
+          [released.index]: { left: released.left, top: released.top },
+        }));
       }
 
       setDraggedSticker(null);
@@ -1152,7 +1105,6 @@ export default function App() {
 
   const handleUpload =
     async () => {
-      // Every new request starts with a clean result state.
       setError(null);
       setDone(false);
 
@@ -1226,8 +1178,6 @@ export default function App() {
               key,
             );
 
-          // Only show the newly decoded
-          // message on success.
           setRevealedMessage(text);
 
           setError(null);
@@ -1235,8 +1185,6 @@ export default function App() {
           setDone(true);
         }
       } catch (err) {
-        // Never keep an old successful
-        // message after a failed reveal.
         if (mode === "reveal") {
           setRevealedMessage(null);
         }
@@ -1410,15 +1358,15 @@ export default function App() {
             inset 0 -1px 0
             rgba(200, 220, 255, 0.15);
         }
-            /* Hide the main Secure Steg card scrollbar in Pokémon theme */
-            .theme-pokemon .glass-card {
-              scrollbar-width: none;
-              -ms-overflow-style: none;
-            }
 
-            .theme-pokemon .glass-card::-webkit-scrollbar {
-              display: none;
-            }
+        .theme-pokemon .glass-card {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .theme-pokemon .glass-card::-webkit-scrollbar {
+          display: none;
+        }
 
         .glass-input {
           background:
@@ -1701,9 +1649,6 @@ export default function App() {
           background:
             rgba(255, 255, 255, 0.5) !important;
         }
-                /* ============================================================
-           POKÉMON SETTINGS PANEL
-        ============================================================= */
 
         .settings-pokemon-panel {
           overflow: visible;
@@ -1873,10 +1818,6 @@ export default function App() {
           }
         }
 
-        /* ============================================================
-           SETTINGS PANEL SCROLLBAR
-        ============================================================= */
-
         .settings-scroll {
           scrollbar-width: thin;
           scrollbar-color: rgba(100,116,139,0.65) rgba(100,116,139,0.08);
@@ -1962,8 +1903,6 @@ export default function App() {
         }}
       />
 
-      
-
       {/* ================================================================
           CENTER GLASS CARD
       ================================================================= */}
@@ -1996,8 +1935,6 @@ export default function App() {
         >
           {/* ==========================================================
               POKÉBALL WATERMARK
-              
-              Pokémon-related decoration is hidden outside Pokémon mode.
           =========================================================== */}
 
           {pokemonTheme && (
@@ -2132,8 +2069,6 @@ export default function App() {
 
           {/* ==========================================================
               DIVIDER WITH POKÉBALL
-              
-              Only visible in Pokémon mode.
           =========================================================== */}
 
           <div className="flex items-center gap-3 -mt-1">
@@ -2546,12 +2481,6 @@ export default function App() {
                 </>
               )}
 
-              {/* ========================================================
-                  POKÉMON UPLOAD DECORATION
-                  
-                  Only shown when Pokémon Theme is active.
-              ========================================================= */}
-
               {pokemonTheme &&
                 UPLOAD_STICKER_URL && (
                   <img
@@ -2577,8 +2506,6 @@ export default function App() {
 
       {/* ================================================================
           POKÉBALL / POKÉDEX
-          
-          Only rendered in Pokémon Theme.
       ================================================================= */}
 
       {pokemonTheme && (
@@ -2644,11 +2571,6 @@ function Settings({
   const [aboutOpen, setAboutOpen] =
     useState(false);
 
-  // ─────────────────────────────────────────────────────────────────────
-  // MUSIC PLAYER STATE (UI only — see FUTURE AUDIO ASSETS note above for
-  // how to wire this to a real <audio> element once files exist)
-  // ─────────────────────────────────────────────────────────────────────
-
   const [trackIndex, setTrackIndex] =
     useState(0);
 
@@ -2663,15 +2585,6 @@ function Settings({
 
   const [duration, setDuration] =
     useState(0);
-
-  // ─────────────────────────────────────────────────────────────────────
-  // AUTOPLAY-SAFE PLAYBACK
-  //
-  // Browsers block audio.play() until the page has had some form of user
-  // interaction. `attemptPlay` tries to play immediately; if the browser
-  // rejects it, `armAutoplayUnlock` arms a one-time listener for the
-  // earliest allowed interaction (pointer/touch/key) and retries then.
-  // ─────────────────────────────────────────────────────────────────────
 
   const unlockArmedRef =
     useRef(false);
@@ -2750,8 +2663,6 @@ function Settings({
           "function"
       ) {
         playResult.catch(() => {
-          // Autoplay blocked — wait for the
-          // earliest allowed user interaction.
           armAutoplayUnlock();
         });
       }
@@ -2763,8 +2674,6 @@ function Settings({
     attemptPlayRef.current = attemptPlay;
   }, [attemptPlay]);
 
-  // Clean up any still-armed unlock listeners if this component ever
-  // unmounts before the user interacts with the page.
   useEffect(() => {
     return () => {
       removeUnlockListenersRef.current();
@@ -2783,131 +2692,118 @@ function Settings({
         MUSIC_PLAYLIST.length,
     );
 
-    // Loads a track whenever it changes. This is the ONLY place that
-    // touches `audio.src` / `audio.load()`, so switching settings like
-    // `music` or `theme` can never re-trigger a reload and restart
-    // playback from 0.
-    useEffect(() => {
-      const audio = audioRef.current;
-      const track = MUSIC_PLAYLIST[trackIndex];
+  useEffect(() => {
+    const audio = audioRef.current;
+    const track = MUSIC_PLAYLIST[trackIndex];
 
-      if (!audio || !track) {
-        return;
-      }
+    if (!audio || !track) {
+      return;
+    }
 
-      audio.src = track.src;
-      audio.load();
+    audio.src = track.src;
+    audio.load();
 
-      setCurrentTime(0);
-      setDuration(0);
-    }, [trackIndex]);
+    setCurrentTime(0);
+    setDuration(0);
+  }, [trackIndex]);
 
-    // Single play/pause driver. Also reacts to `trackIndex` so that
-    // advancing/going back a track resumes playback (autoplay-safe via
-    // `attemptPlay`) without duplicating the load logic above.
-    useEffect(() => {
-      const audio = audioRef.current;
+  useEffect(() => {
+    const audio = audioRef.current;
 
-      if (!audio) {
-        return;
-      }
+    if (!audio) {
+      return;
+    }
 
-      if (!music || theme !== "pokemon" ||!isPlaying) {
-        audio.pause();
-        return;
-      }
+    if (!music || theme !== "pokemon" ||!isPlaying) {
+      audio.pause();
+      return;
+    }
 
-      attemptPlay();
-      }, [
-        music,
-        isPlaying,
-        theme,
-        trackIndex,
-        attemptPlay,
-      ]);
+    attemptPlay();
+  }, [
+    music,
+    isPlaying,
+    theme,
+    trackIndex,
+    attemptPlay,
+  ]);
 
-      useEffect(() => {
-  const audio = audioRef.current;
+  useEffect(() => {
+    const audio = audioRef.current;
 
-  if (!audio) {
-    return;
-  }
+    if (!audio) {
+      return;
+    }
 
-  const handleTimeUpdate = () => {
-    setCurrentTime(audio.currentTime);
-  };
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
 
-  const handleLoadedMetadata = () => {
-    setDuration(
-      Number.isFinite(audio.duration)
-        ? audio.duration
-        : 0,
-    );
-  };
+    const handleLoadedMetadata = () => {
+      setDuration(
+        Number.isFinite(audio.duration)
+          ? audio.duration
+          : 0,
+      );
+    };
 
-  audio.addEventListener(
-    "timeupdate",
-    handleTimeUpdate,
-  );
-
-  audio.addEventListener(
-    "loadedmetadata",
-    handleLoadedMetadata,
-  );
-
-  return () => {
-    audio.removeEventListener(
+    audio.addEventListener(
       "timeupdate",
       handleTimeUpdate,
     );
 
-    audio.removeEventListener(
+    audio.addEventListener(
       "loadedmetadata",
       handleLoadedMetadata,
     );
-  };
-}, []);
 
-    useEffect(() => {
-      const audio =
-        audioRef.current;
+    return () => {
+      audio.removeEventListener(
+        "timeupdate",
+        handleTimeUpdate,
+      );
 
-      if (!audio) {
-        return;
-      }
+      audio.removeEventListener(
+        "loadedmetadata",
+        handleLoadedMetadata,
+      );
+    };
+  }, []);
 
-      const handleEnded =
-        () => {
-          setTrackIndex(
-            (current) =>
-              (current + 1) %
-              MUSIC_PLAYLIST.length,
-          );
+  useEffect(() => {
+    const audio =
+      audioRef.current;
 
-          setIsPlaying(true);
-        };
+    if (!audio) {
+      return;
+    }
 
-      audio.addEventListener(
+    const handleEnded =
+      () => {
+        setTrackIndex(
+          (current) =>
+            (current + 1) %
+            MUSIC_PLAYLIST.length,
+        );
+
+        setIsPlaying(true);
+      };
+
+    audio.addEventListener(
+      "ended",
+      handleEnded,
+    );
+
+    return () => {
+      audio.removeEventListener(
         "ended",
         handleEnded,
       );
-
-      return () => {
-        audio.removeEventListener(
-          "ended",
-          handleEnded,
-        );
-      };
-    }, []);
+    };
+  }, []);
 
   const panelRef =
     useRef<HTMLDivElement>(null);
-
-  // ─────────────────────────────────────────────────────────────────────
-  // SCROLL FADE INDICATORS
-  // Makes it obvious the panel has more content to scroll to, since
-  // native scrollbars are often invisible on mobile/touch devices.
-  // ─────────────────────────────────────────────────────────────────────
 
   const scrollRef =
     useRef<HTMLDivElement>(null);
@@ -2950,7 +2846,6 @@ function Settings({
 
   const t = TRANSLATIONS[language];
 
-  // Save settings whenever one changes.
   useEffect(() => {
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
@@ -2968,7 +2863,6 @@ function Settings({
     language,
   ]);
 
-  // Close settings when clicking outside.
   useEffect(() => {
     if (!open) {
       return;
@@ -3003,7 +2897,6 @@ function Settings({
     };
   }, [open]);
 
-  // Escape closes the menu.
   useEffect(() => {
     if (!open) {
       return;
@@ -3039,10 +2932,6 @@ function Settings({
       ref={audioRef}
       preload="auto"
     />
-      {/* ==============================================================
-          SETTINGS BUTTON
-      =============================================================== */}
-
       <div
         ref={panelRef}
         className="fixed top-4 left-4 sm:top-5 sm:left-5"
@@ -3104,10 +2993,6 @@ function Settings({
           />
         </button>
 
-        {/* ============================================================
-            SETTINGS PANEL
-        ============================================================= */}
-
         {open && (
           <div
           className={`absolute left-0 ${
@@ -3151,8 +3036,6 @@ function Settings({
               draggable={false}
             />
           )}
-
-          {/* Header */}
 
           <div
               className="relative flex items-center justify-between px-5 py-3"
@@ -3212,11 +3095,6 @@ function Settings({
                     : 16,
               }}
             >
-          
-
-              {/* ========================================================
-                  APPEARANCE
-              ========================================================= */}
 
               <section>
                 <div
@@ -3295,10 +3173,6 @@ function Settings({
                 </div>
               </section>
 
-              {/* ========================================================
-                  AUDIO
-              ========================================================= */}
-
               <section className="mt-5">
                 <div
                   className="px-2 pb-2 text-xs font-semibold uppercase tracking-wider"
@@ -3358,19 +3232,13 @@ function Settings({
                         onToggle={() =>
                           onMusicChange(
                             !music,
-                            
                           )
                         }
                       />
-                  </>
+                    </>
                 )}
 
-                {/* ======================================================
-                    MUSIC PLAYER CONTROLS
-                    Only shown while Music is turned on.
-                ======================================================= */}
-
-                {theme === "pokemon" &&music && (
+                {theme === "pokemon" && music && (
                   <div
                     className="mt-2 flex items-center justify-between gap-3 rounded-2xl p-3"
                     style={{
@@ -3494,10 +3362,6 @@ function Settings({
                 )}
               </section>
 
-              {/* ========================================================
-                  LANGUAGE
-              ========================================================= */}
-
               <section className="mt-5">
                 <div
                   className="px-2 pb-2 text-xs font-semibold uppercase tracking-wider"
@@ -3601,10 +3465,6 @@ function Settings({
                 </div>
               </section>
 
-              {/* ========================================================
-                  ABOUT CREATOR
-              ========================================================= */}
-
               <section className="mt-5">
                 <div
                   className="px-2 pb-2 text-xs font-semibold uppercase tracking-wider"
@@ -3683,7 +3543,6 @@ function Settings({
                 </button>
               </section>
 
-              
             </div>
             {theme === "pokemon" && (
             <div className="settings-pokemon-footer">
@@ -3716,10 +3575,6 @@ function Settings({
         )}
       </div>
 
-      {/* ================================================================
-          ABOUT CREATOR MODAL
-      ================================================================= */}
-
       {aboutOpen && (
         <div
           className="fixed inset-0 flex items-center justify-center p-4"
@@ -3730,7 +3585,6 @@ function Settings({
             WebkitBackdropFilter: "blur(8px)",
           }}
           onPointerDown={(event) => {
-            // This stops the click from bubbling up and closing the Settings panel
             event.stopPropagation(); 
             
             if (event.target === event.currentTarget) {
@@ -3738,7 +3592,6 @@ function Settings({
             }
           }}
         >
-          
           <div
             className="w-full max-w-sm rounded-3xl p-6"
             style={{
@@ -3854,10 +3707,6 @@ function Settings({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// THEME BUTTON
-// ─────────────────────────────────────────────────────────────────────────
-
 interface ThemeButtonProps {
   active: boolean;
   icon: ReactNode;
@@ -3921,10 +3770,6 @@ function ThemeButton({
     </button>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────
-// SETTINGS TOGGLE
-// ─────────────────────────────────────────────────────────────────────────
 
 interface SettingToggleProps {
   icon: ReactNode;

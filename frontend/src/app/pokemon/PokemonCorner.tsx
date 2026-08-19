@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from "react";
 import { usePokedexCollection } from "./usePokedexCollection";
 import PokedexModal from "./PokedexModal";
@@ -24,6 +25,43 @@ import type {
 
 type PokedexTheme = "retro" | "modern";
 type Rarity = "common" | "uncommon" | "rare" | "epic";
+
+// ─────────────────────────────────────────────────────────────────────────
+// ACHIEVEMENTS DATA
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface Achievement {
+  id: string;
+  category: "catches" | "rarity" | "pokedex" | "clicks";
+  title: string;
+  desc: string;
+  icon: string;
+}
+
+export const ACHIEVEMENTS: Achievement[] = [
+  // Catches
+  { id: "catch_1", category: "catches", title: "First Step", desc: "Catch your very first Pokémon", icon: "🌱" },
+  { id: "catch_10", category: "catches", title: "Rising Trainer", desc: "Catch 10 total Pokémon", icon: "⭐" },
+  { id: "catch_25", category: "catches", title: "Poké Baller", desc: "Catch 25 total Pokémon", icon: "⚡" },
+  { id: "catch_50", category: "catches", title: "Elite Catcher", desc: "Catch 50 total Pokémon", icon: "🔥" },
+  { id: "catch_100", category: "catches", title: "Gotta Catch 'Em All", desc: "Catch 100 total Pokémon", icon: "👑" },
+
+  // Rarity
+  { id: "rare_uncommon", category: "rarity", title: "Lucky Find", desc: "Catch your first Uncommon Pokémon", icon: "💎" },
+  { id: "rare_rare", category: "rarity", title: "Jackpot", desc: "Catch your first Rare Pokémon", icon: "✨" },
+  { id: "rare_epic", category: "rarity", title: "Mythical Encounter", desc: "Catch your first Epic Pokémon", icon: "🔮" },
+  { id: "rare_legendary", category: "rarity", title: "Living Legend", desc: "Catch your first Legendary Pokémon", icon: "🌌" },
+
+  // Pokédex Unique Species
+  { id: "dex_10", category: "pokedex", title: "Field Researcher", desc: "Register 10 unique species in the Pokédex", icon: "📖" },
+  { id: "dex_25", category: "pokedex", title: "Pokédex Enthusiast", desc: "Register 25 unique species in the Pokédex", icon: "🔍" },
+  { id: "dex_50", category: "pokedex", title: "Regional Master", desc: "Register 50 unique species in the Pokédex", icon: "🏆" },
+
+  // Clicking / Spam
+  { id: "click_50", category: "clicks", title: "Fidget Spinner", desc: "Spin the Pokéball 50 times", icon: "🌀" },
+  { id: "click_150", category: "clicks", title: "Hyper Drive", desc: "Spin the Pokéball 150 times", icon: "🚀" },
+  { id: "ball_morph", category: "clicks", title: "Ball Morph Master", desc: "Trigger a Pokéball shape transition", icon: "✨" },
+];
 
 interface PokemonDefinition {
   id: number;
@@ -485,7 +523,7 @@ export default function PokemonCorner() {
     useRef<HTMLButtonElement | null>(
       null,
     );
-    // Tracks the timestamp of the last spin to enforce a speed limit
+  // Tracks the timestamp of the last spin to enforce a speed limit
   const lastSpinTime = useRef(0);
 
   const [captureState, setCaptureState] =
@@ -517,11 +555,48 @@ export default function PokemonCorner() {
   const [dexOpen, setDexOpen] =
     useState(false);
 
+  // Ball states
   const [spinDegrees, setSpinDegrees] = useState(0);
   const [ballClicks, setBallClicks] = useState(0);
-  
-  // Tracks the current random ball type
   const [ballType, setBallType] = useState<"poke" | "great" | "ultra" | "premier" | "master">("poke");
+
+  // Persistent achievements stored in localStorage
+  const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem("steg-unlocked-achievements") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  // Toast notification queue state
+  const [activeToast, setActiveToast] = useState<Achievement | null>(null);
+
+  // Helper function to check and unlock achievements safely
+  const triggerUnlock = useCallback((achievementId: string) => {
+    setUnlockedAchievements(prev => {
+      if (prev.includes(achievementId)) return prev;
+      const next = [...prev, achievementId];
+      try {
+        window.localStorage.setItem("steg-unlocked-achievements", JSON.stringify(next));
+      } catch {}
+
+      const found = ACHIEVEMENTS.find(a => a.id === achievementId);
+      if (found) {
+        setActiveToast(found);
+      }
+      return next;
+    });
+  }, []);
+
+  // Automatically dismiss the toast after 3.5 seconds
+  useEffect(() => {
+    if (!activeToast) return;
+    const timer = window.setTimeout(() => {
+      setActiveToast(null);
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [activeToast]);
 
   const [pokedexTheme, setPokedexTheme] =
     useState<PokedexTheme>(
@@ -648,16 +723,12 @@ export default function PokemonCorner() {
         return;
       }
 
-      
-
       const inside = !(
-      left + current.size < ballRect.left ||
-      left > ballRect.right ||
-      top + current.size < ballRect.top ||
-      top > ballRect.bottom
+        left + current.size < ballRect.left ||
+        left > ballRect.right ||
+        top + current.size < ballRect.top ||
+        top > ballRect.bottom
       );
-
-setPokeballHover(inside);
 
       setPokeballHover(inside);
     };
@@ -689,13 +760,13 @@ setPokeballHover(inside);
         pokeballRef.current?.getBoundingClientRect();
 
       const droppedOnBall =
-      !!ballRect &&
-      !(
-        current.left + current.size < ballRect.left ||
-        current.left > ballRect.right ||
-        current.top + current.size < ballRect.top ||
-        current.top > ballRect.bottom
-      );
+        !!ballRect &&
+        !(
+          current.left + current.size < ballRect.left ||
+          current.left > ballRect.right ||
+          current.top + current.size < ballRect.top ||
+          current.top > ballRect.bottom
+        );
 
       // ─────────────────────────────────────────────────────────────
       // Catch
@@ -881,6 +952,26 @@ setPokeballHover(inside);
         setCaptureState(
           "success",
         );
+
+        // --- TRIGGER ACHIEVEMENTS ---
+        const totalCaught = (collection?.length || 0) + 1;
+        const uniqueCaught = new Set([...(collection || []).map(p => p.id), capturePokemon.id]).size;
+
+        if (totalCaught >= 1) triggerUnlock("catch_1");
+        if (totalCaught >= 10) triggerUnlock("catch_10");
+        if (totalCaught >= 25) triggerUnlock("catch_25");
+        if (totalCaught >= 50) triggerUnlock("catch_50");
+        if (totalCaught >= 100) triggerUnlock("catch_100");
+
+        if (uniqueCaught >= 10) triggerUnlock("dex_10");
+        if (uniqueCaught >= 25) triggerUnlock("dex_25");
+        if (uniqueCaught >= 50) triggerUnlock("dex_50");
+
+        if (capturePokemon.rarity === "uncommon") triggerUnlock("rare_uncommon");
+        if (capturePokemon.rarity === "rare") triggerUnlock("rare_rare");
+        if (capturePokemon.rarity === "epic") triggerUnlock("rare_epic");
+        if (capturePokemon.rarity === "legendary") triggerUnlock("rare_legendary");
+
       } else {
         setSuccessName(null);
 
@@ -927,6 +1018,8 @@ setPokeballHover(inside);
   }, [
     capturePokemon,
     addPokemon,
+    collection,
+    triggerUnlock,
   ]);
 
   // ───────────────────────────────────────────────────────────────────
@@ -2142,24 +2235,22 @@ setPokeballHover(inside);
             lastSpinTime.current = now;
             setSpinDegrees(prev => prev + 360);
 
-            // Increment clicks and check for the 50-click threshold
+            // Increment clicks and check for the thresholds
             setBallClicks(prev => {
               const nextClicks = prev + 1;
               
-              if (nextClicks % 15 === 0) {
-                // Time to transition! Pick a random ball.
+              if (nextClicks >= 50) triggerUnlock("click_50");
+              if (nextClicks >= 150) triggerUnlock("click_150");
+
+              if (nextClicks % 50 === 0) {
+                triggerUnlock("ball_morph");
                 setBallType(currentType => {
                   const allTypes: Array<"poke" | "great" | "ultra" | "premier" | "master"> = 
                     ["poke", "great", "ultra", "premier", "master"];
-                  
-                  // Remove the current type so it's guaranteed to change
                   const availableTypes = allTypes.filter(t => t !== currentType);
-                  
-                  // Pick a random one from the remaining options
                   return availableTypes[Math.floor(Math.random() * availableTypes.length)];
                 });
               }
-              
               return nextClicks;
             });
           }}
@@ -2172,14 +2263,23 @@ setPokeballHover(inside);
             <span className="pc-ball-glow" />
           )}
 
-          {/* Calculate the ball evolution based on the current combo */}
-          <PokeballIcon
-            open={pokeballHover || captureState === "shaking"}
-            capturing={captureState === "shaking"}
-            success={captureState === "success"}
-            spinDegrees={spinDegrees}
-            type={ballType}
-          />
+          <div
+             style={{
+               width: '100%', 
+               height: '100%', 
+               display: 'flex', 
+               alignItems: 'center', 
+               justifyContent: 'center'
+             }}
+          >
+            <PokeballIcon
+              open={pokeballHover || captureState === "shaking"}
+              capturing={captureState === "shaking"}
+              success={captureState === "success"}
+              spinDegrees={spinDegrees}
+              type={ballType}
+            />
+          </div>
 
           {pokeballHover && captureState === "idle" && (
             <span className="pc-release-hint">Release to catch</span>
@@ -2324,7 +2424,46 @@ setPokeballHover(inside);
         onUpdatePokemon={
           updatePokemon
         }
+        unlockedAchievements={unlockedAchievements}
+        achievementsList={ACHIEVEMENTS}
       />
+
+      {/* ───────────────────────────────────────────────────────────────
+          ACHIEVEMENT UNLOCK TOAST NOTIFICATION
+      ─────────────────────────────────────────────────────────────── */}
+
+      {activeToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(15, 23, 42, 0.92)",
+            color: "#f8fafc",
+            padding: "12px 20px",
+            borderRadius: "9999px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            zIndex: 9999,
+            animation: "pcResultIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+          }}
+        >
+          <span style={{ fontSize: "20px" }}>{activeToast.icon}</span>
+          <div>
+            <div style={{ fontSize: "10px", textTransform: "uppercase", color: "#fbbf24", fontWeight: 700, letterSpacing: "0.05em" }}>
+              Achievement Unlocked!
+            </div>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>{activeToast.title}</div>
+          </div>
+        </div>
+      )}
+
     </>
   );
 }
@@ -2557,7 +2696,6 @@ function PokeballIcon({
   spinDegrees?: number;
   type?: "poke" | "great" | "ultra" | "premier" | "master";
 }) {
-  // Define the dynamic colors for the 5 ball types
   const theme = {
     poke: { top: "#EF4444", bottom: "white", ring: "#1E293B" },
     great: { top: "#3B82F6", bottom: "white", ring: "#1E293B" },
@@ -2566,7 +2704,6 @@ function PokeballIcon({
     master: { top: "#8B5CF6", bottom: "white", ring: "#1E293B" },
   }[type] || { top: "#EF4444", bottom: "white", ring: "#1E293B" };
 
-  // A shared transition so the colors morph smoothly instead of snapping
   const morphTransition = "fill 0.4s ease, stroke 0.4s ease, opacity 0.4s ease";
 
   return (
@@ -2599,34 +2736,19 @@ function PokeballIcon({
         </clipPath>
       </defs>
 
-      {/* Base White Bottom */}
       <circle cx="80" cy="80" r="72" fill={theme.bottom} style={{ transition: morphTransition }} />
-
-      {/* Dynamic Upper Half */}
       <rect x="8" y="8" width="144" height="72" fill={theme.top} clipPath="url(#pokeball-circle-clip)" style={{ transition: morphTransition }} />
 
-      {/* --- GREAT BALL DETAILS --- */}
       <path d="M 25 15 Q 50 35 45 60 L 25 60 Q 25 35 10 25 Z" fill="#EF4444" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "great" ? 1 : 0, transition: morphTransition }} />
       <path d="M 135 15 Q 110 35 115 60 L 135 60 Q 135 35 150 25 Z" fill="#EF4444" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "great" ? 1 : 0, transition: morphTransition }} />
-
-      {/* --- ULTRA BALL DETAILS --- */}
       <path d="M 40 80 L 40 40 L 120 40 L 120 80 L 140 80 L 140 20 L 20 20 L 20 80 Z" fill="#FACC15" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "ultra" ? 1 : 0, transition: morphTransition }} />
-
-      {/* --- MASTER BALL DETAILS --- */}
       <circle cx="35" cy="40" r="16" fill="#EC4899" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "master" ? 1 : 0, transition: morphTransition }} />
       <circle cx="125" cy="40" r="16" fill="#EC4899" clipPath="url(#pokeball-circle-clip)" style={{ opacity: type === "master" ? 1 : 0, transition: morphTransition }} />
       <path d="M 62 30 L 72 30 L 80 44 L 88 30 L 98 30 L 98 55 L 88 55 L 88 40 L 80 50 L 72 40 L 72 55 L 62 55 Z" fill="white" style={{ opacity: type === "master" ? 1 : 0, transition: morphTransition }} />
 
-      {/* Outer circular border */}
       <circle cx="80" cy="80" r="72" stroke="#1E293B" strokeWidth="8" />
-
-      {/* Middle divider */}
       <line x1="8" y1="80" x2="152" y2="80" stroke={theme.ring} strokeWidth="8" style={{ transition: morphTransition }} />
-
-      {/* Center ring */}
       <circle cx="80" cy="80" r="22" fill="white" stroke={theme.ring} strokeWidth="8" style={{ transition: morphTransition }} />
-
-      {/* Center button */}
       <circle cx="80" cy="80" r="9" fill={success ? "#22C55E" : open ? "#EF4444" : theme.ring} style={{ transition: morphTransition }} />
     </svg>
   );

@@ -24,6 +24,7 @@ import {
   PokeApiError,
 } from "./pokeapi";
 import { getPixelSprite } from "./sprites";
+import type { Achievement } from "./PokemonCorner";
 
 type Skin = "retro" | "modern";
 
@@ -62,6 +63,8 @@ interface PokedexModalProps {
   unreadIds: number[];
   onMarkViewed: (id: number) => void;
   onUpdatePokemon: (pokemon: PokemonSummary) => void;
+  unlockedAchievements: string[];
+  achievementsList: Achievement[];
 }
 
 export default function PokedexModal({
@@ -74,6 +77,8 @@ export default function PokedexModal({
   unreadIds,
   onMarkViewed,
   onUpdatePokemon,
+  unlockedAchievements,
+  achievementsList,
 }: PokedexModalProps) {
   const [skin, setSkin] =
     useState<Skin>(() => {
@@ -92,6 +97,8 @@ export default function PokedexModal({
     useState<number | null>(
       initialSelectedId,
     );
+    
+  const [tab, setTab] = useState<"pokemon" | "achievements">("pokemon");
 
   const unreadCount = unreadIds.length;
 
@@ -402,7 +409,7 @@ export default function PokedexModal({
       `}</style>
 
       <div
-        className="dex-mobile-panel w-full max-w-md rounded-[28px] overflow-hidden"
+        className="dex-mobile-panel w-full max-w-md rounded-[28px] overflow-hidden flex flex-col"
         style={{
           animation:
             "dexPanelIn 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
@@ -439,7 +446,7 @@ export default function PokedexModal({
       >
         {/* Header */}
         <div
-          className="dex-mobile-header flex items-center justify-between gap-2.5 px-5 py-4"
+          className="dex-mobile-header flex items-center justify-between gap-2.5 px-5 py-4 shrink-0"
           style={
             isRetro
               ? {
@@ -586,12 +593,63 @@ export default function PokedexModal({
           </div>
         </div>
 
+        {/* Tab Controls */}
+        {selectedId === null && (
+          <div
+            className="flex gap-2 px-5 py-3 shrink-0"
+            style={{
+              borderBottom: isRetro
+                ? "1px solid rgba(0,0,0,0.15)"
+                : "1px solid rgba(30,41,59,0.08)",
+              background: isRetro
+                ? "rgba(0,0,0,0.08)"
+                : "rgba(241,245,249,0.5)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setTab("pokemon")}
+              className="flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors"
+              style={{
+                background: tab === "pokemon"
+                  ? isRetro ? "#38bdf8" : "#3b82f6"
+                  : "transparent",
+                color: tab === "pokemon"
+                  ? "#ffffff"
+                  : isRetro ? "rgba(255,247,237,0.7)" : "#64748b",
+                boxShadow: tab === "pokemon"
+                  ? "0 2px 6px rgba(0,0,0,0.15)"
+                  : "none",
+              }}
+            >
+              Pokémon ({collection.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTab("achievements")}
+              className="flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors"
+              style={{
+                background: tab === "achievements"
+                  ? isRetro ? "#fde047" : "#f59e0b"
+                  : "transparent",
+                color: tab === "achievements"
+                  ? isRetro ? "#78350f" : "#ffffff"
+                  : isRetro ? "rgba(255,247,237,0.7)" : "#64748b",
+                boxShadow: tab === "achievements"
+                  ? "0 2px 6px rgba(0,0,0,0.15)"
+                  : "none",
+              }}
+            >
+              Achievements ({unlockedAchievements.length}/{achievementsList.length})
+            </button>
+          </div>
+        )}
+
         {/* Screen/body */}
         <div
-          className="dex-mobile-body dex-scroll overflow-y-auto"
+          className="dex-mobile-body dex-scroll overflow-y-auto flex-1"
           style={{
-            maxHeight:
-              "calc(min(720px, 88dvh) - 64px)",
             padding:
               isRetro ? 14 : 0,
           }}
@@ -635,6 +693,12 @@ export default function PokedexModal({
                   onUpdatePokemon
                 }
               />
+            ) : tab === "achievements" ? (
+              <AchievementsView
+                isRetro={isRetro}
+                unlockedAchievements={unlockedAchievements}
+                achievementsList={achievementsList}
+              />
             ) : (
               <GridView
                 collection={
@@ -653,6 +717,60 @@ export default function PokedexModal({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AchievementsView({
+  isRetro,
+  unlockedAchievements,
+  achievementsList,
+}: {
+  isRetro: boolean;
+  unlockedAchievements: string[];
+  achievementsList: Achievement[];
+}) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {achievementsList.map(ach => {
+        const isUnlocked = unlockedAchievements.includes(ach.id);
+        return (
+          <div
+            key={ach.id}
+            className="flex items-center gap-3 p-3 rounded-2xl transition-all"
+            style={{
+              background: isUnlocked 
+                ? (isRetro ? "rgba(253, 224, 71, 0.2)" : "rgba(245, 158, 11, 0.1)") 
+                : (isRetro ? "rgba(0, 0, 0, 0.05)" : "rgba(100, 116, 139, 0.05)"),
+              border: `1px solid ${isUnlocked ? (isRetro ? "rgba(253, 224, 71, 0.5)" : "rgba(245, 158, 11, 0.3)") : (isRetro ? "rgba(0,0,0,0.1)" : "rgba(100, 116, 139, 0.1)")}`,
+              opacity: isUnlocked ? 1 : 0.65,
+            }}
+          >
+            <span className="text-2xl" style={{ filter: isUnlocked ? "none" : "grayscale(100%) opacity(50%)" }}>
+              {isUnlocked ? ach.icon : "🔒"}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-bold truncate" style={{ color: isUnlocked ? (isRetro ? "#451a03" : "#d97706") : (isRetro ? "#1c1917" : "#475569") }}>
+                {ach.title}
+              </div>
+              <div className="text-[11px] truncate" style={{ color: isRetro ? "rgba(0,0,0,0.6)" : "#64748b" }}>
+                {ach.desc}
+              </div>
+            </div>
+            {isUnlocked && (
+              <span 
+                className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg"
+                style={{
+                  color: isRetro ? "#14532d" : "#16a34a",
+                  background: isRetro ? "rgba(34, 197, 94, 0.3)" : "#dcfce7"
+                }}
+              >
+                Done
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
