@@ -61,6 +61,10 @@ const USE_POKEMON = true;
 // false -> floating stickers are not interactive
 const INTERACTIVE_STICKERS = true;
 
+
+// Change this to `false` to completely hide the Pokémon theme option from the UI
+const ENABLE_POKEMON_THEME = true;
+
 // ─────────────────────────────────────────────────────────────────────────
 // POKÉMON LIST
 // ─────────────────────────────────────────────────────────────────────────
@@ -709,34 +713,27 @@ export default function App() {
   // APPLICATION SETTINGS (Unified with Light Mode as Default)
   // ───────────────────────────────────────────────────────────────────────
 
-  const [theme, setTheme] =
-    useState<AppTheme>(() => {
-      try {
-        const saved =
-          localStorage.getItem(
-            SETTINGS_STORAGE_KEY,
-          );
-
-        if (!saved) {
-          return "light"; // Default to light mode for new users!
-        }
-
-        const parsed =
-          JSON.parse(saved);
-
-        if (
-          parsed.theme === "pokemon" ||
-          parsed.theme === "light" ||
-          parsed.theme === "dark"
-        ) {
-          return parsed.theme;
-        }
-      } catch {
-        // Use default.
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    try {
+      const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!saved) {
+        return "light"; 
       }
-
-      return "light";
-    });
+      const parsed = JSON.parse(saved);
+      
+      // If they saved Pokémon, but you disabled it, force them back to Light mode
+      if (parsed.theme === "pokemon") {
+        return ENABLE_POKEMON_THEME ? "pokemon" : "light";
+      }
+      
+      if (parsed.theme === "light" || parsed.theme === "dark") {
+        return parsed.theme;
+      }
+    } catch {
+      // Use default.
+    }
+    return "light";
+  });
 
   const [soundEffects, setSoundEffects] =
     useState<boolean>(() => {
@@ -2160,17 +2157,17 @@ export default function App() {
               style={{
                 background:
                   mode === "hide"
-                    ? "rgba(255,255,255,0.9)"
+                    ? (theme === "dark" ? "rgba(255, 255, 255, 0.15)" : "rgba(255,255,255,0.9)")
                     : "transparent",
 
                 color:
                   mode === "hide"
-                    ? "#1e293b"
+                    ? (theme === "dark" ? "#f8fafc" : "#1e293b")
                     : "#94a3b8",
 
                 boxShadow:
                   mode === "hide"
-                    ? "0 1px 4px rgba(100,130,200,0.18)"
+                    ? (theme === "dark" ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 4px rgba(100,130,200,0.18)")
                     : "none",
               }}
             >
@@ -2188,17 +2185,17 @@ export default function App() {
               style={{
                 background:
                   mode === "reveal"
-                    ? "rgba(255,255,255,0.9)"
+                    ? (theme === "dark" ? "rgba(255, 255, 255, 0.15)" : "rgba(255,255,255,0.9)")
                     : "transparent",
 
                 color:
                   mode === "reveal"
-                    ? "#1e293b"
+                    ? (theme === "dark" ? "#f8fafc" : "#1e293b")
                     : "#94a3b8",
 
                 boxShadow:
                   mode === "reveal"
-                    ? "0 1px 4px rgba(100,130,200,0.18)"
+                    ? (theme === "dark" ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 4px rgba(100,130,200,0.18)")
                     : "none",
               }}
             >
@@ -3109,67 +3106,33 @@ function Settings({
                   {t.appearance}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className={`grid gap-2 ${ENABLE_POKEMON_THEME ? "grid-cols-3" : "grid-cols-2"}`}>
                   <ThemeButton
-                    active={
-                      theme === "light"
-                    }
-                    icon={
-                      <Sun size={17} />
-                    }
+                    active={theme === "light"}
+                    icon={<Sun size={17} />}
                     label={t.themeLight}
-                    dark={
-                      theme ===
-                      "dark"
-                    }
-                    onClick={() =>
-                      onThemeChange(
-                        "light",
-                      )
-                    }
+                    dark={theme === "dark"}
+                    onClick={() => onThemeChange("light")}
                   />
 
                   <ThemeButton
-                    active={
-                      theme === "dark"
-                    }
-                    icon={
-                      <Moon size={17} />
-                    }
+                    active={theme === "dark"}
+                    icon={<Moon size={17} />}
                     label={t.themeDark}
-                    dark={
-                      theme ===
-                      "dark"
-                    }
-                    onClick={() =>
-                      onThemeChange(
-                        "dark",
-                      )
-                    }
+                    dark={theme === "dark"}
+                    onClick={() => onThemeChange("dark")}
                   />
 
-                  <ThemeButton
-                    active={
-                      theme ===
-                      "pokemon"
-                    }
-                    icon={
-                      <Sparkles
-                        size={17}
-                      />
-                    }
-                    label={t.themePokemon}
-                    dark={
-                      theme ===
-                      "dark"
-                    }
-                    pokemon
-                    onClick={() =>
-                      onThemeChange(
-                        "pokemon",
-                      )
-                    }
-                  />
+                  {ENABLE_POKEMON_THEME && (
+                    <ThemeButton
+                      active={theme === "pokemon"}
+                      icon={<Sparkles size={17} />}
+                      label={t.themePokemon}
+                      dark={theme === "dark"}
+                      pokemon
+                      onClick={() => onThemeChange("pokemon")}
+                    />
+                  )}
                 </div>
               </section>
 
