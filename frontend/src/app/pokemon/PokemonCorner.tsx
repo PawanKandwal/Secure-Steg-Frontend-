@@ -1015,12 +1015,8 @@ export default function PokemonCorner() {
     return () => {
       cancelled = true;
     };
-  }, [
-    capturePokemon,
-    addPokemon,
-    collection,
-    triggerUnlock,
-  ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capturePokemon]); // <--- Only trigger when a new Pokemon is dropped!
 
   // ───────────────────────────────────────────────────────────────────
   // Start dragging
